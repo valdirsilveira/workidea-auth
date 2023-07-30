@@ -1,0 +1,75 @@
+version: '3'
+
+x-environment: &environment
+  COMPOSE_PROJECT_NAME: 'workidea-auth'
+
+services:
+  workidea-auth-api:
+    container_name: workidea-auth
+    build:
+      context: .
+      dockerfile: './Dockerfile'
+    command: >
+      sh -c "npm install && 
+             if [ ${NODE_ENV:-local} = 'debug' ]; 
+             then 
+                npm start:debug 0.0.0.0:9229;
+             else 
+                npm start:dev; 
+             fi"
+    environment:
+      <<: *environment
+      NODE_ENV: ${NODE_ENV:-local}
+    ports:
+      - ${PORT}:${PORT}
+      - 9229:9229
+    volumes:
+      - ./:/usr/app
+    networks:
+      - host
+    depends_on:
+      - workidea-auth-mongo
+    links:
+      - workidea-auth-mongo
+  workidea-auth-mongo-express:
+    container_name: workidea-auth-mongo-express
+    image: mongo-express
+    env_file:
+      - .env
+    ports:
+      - '8081:8081'
+    environment:
+      <<: *environment
+      ME_CONFIG_BASICAUTH_USERNAME: admin
+      ME_CONFIG_BASICAUTH_PASSWORD: admin
+      ME_CONFIG_MONGODB_URL: mongodb://${MONGODB_ROOT_USERNAME}:${MONGODB_ROOT_PASSWORD}@workidea-auth-mongo:${MONGODB_PORT}/${MONGODB_DATABASE_NAME}?authSource=admin
+    depends_on:
+      - workidea-auth-mongo
+    links:
+      - workidea-auth-mongo
+    networks:
+      - host
+    restart: unless-stopped
+
+  workidea-auth-mongo:
+    container_name: workidea-auth-mongo
+    image: mongo
+    env_file:
+      - .env
+    ports:
+      - '27017:${MONGODB_PORT}'
+    volumes:
+      - ./.docker/mongodb:/data/db
+    logging:
+      options:
+        max-size: 1g
+    environment:
+      <<: *environment
+      MONGO_INITDB_ROOT_USERNAME: ${MONGODB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGODB_ROOT_PASSWORD}
+    networks:
+      - host
+    restart: unless-stopped
+networks:
+  host:
+    driver: bridge
